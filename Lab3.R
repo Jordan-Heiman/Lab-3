@@ -76,7 +76,7 @@ bv <- wolf_all[pack == "Bow Valley", ]
 rd <- wolf_all[pack == "Red Deer", ]
 
 ################################################################################
-#   Boxplots                                                                ####
+#   Box plots                                                               ####
 # This is a function that will make box plots that compare used vs available 
 # points for all the different covariates and print them in a list for viewing
 boxplots <- function(dt, by_pack = FALSE){
@@ -192,146 +192,210 @@ sum(surv_trial)
 # Now let's play with plogis(), this is the distribution function for converting 
 # a value from the logistic scale to a real probability
 # If p = 0, then the probability of an outcome is 0.5, either heads or tails (a fair coin)
-plogis(0)
-plogis(1)
-plogis(-5)
-plogis(-100)
-plogis(5)
-plogis(100)
+plogis_dt <- data.table(p = -100:100,
+                        plogis = 0)
+plogis_dt[, plogis := plogis(p)]
+ggplot(plogis_dt) +
+  aes(x = p, y = plogis) +
+  geom_line(colour = "#112446") +
+  theme_minimal()
 
 # No matter what p is, plogis(p) will always be between 0 and 1
 
 # Let's play with it some more. Next we will simulate 101 numbers from -50 to 50, 
 # and then imagine we are conducting a single binomial trial at each value from
-# -50 to 50. The probability, say, selecting a discrete habitat value increases 
+# -50 to 50. The probability of, say, selecting a discrete habitat value increases 
 # with each value of x according to the Logistic beta coefficient of 0.07.
 
 # Start by creating a uniform vector from -50 to 50
 x <- c(-50:50) 
-y <- rbinom(length(x), 1, plogis(0+0.07*x)) 
+y <- rbinom(length(x), 1, plogis(0 + 0.07 * x)) 
+plot(y ~ x)
+abline(lm(y ~ x)) 
 
-# The 0.07 here is the coefficient for a habitat covariate 
+# This linear model is wrong though because it can be more than 1 and less than 0
+linear_mod <- lm(y~x)
+summary(linear_mod)
+coef(linear_mod)
 
-plot( y ~ x)
-abline(lm(y~x)) # Linear model is wrong though cus it can be more than 1 and less than 0 but the intercept is right (see next chunk)
+# What's needed is a GLM
+glm_mod <- glm(y ~ x, family = binomial(link = "logit"))
+summary(glm_mod)
+yLogit <- predict(glm_mod) # linear predictor part of equation
 
-
-## ------------------------------------------------------------------------------------------------------------------------
-wrong = lm(y~x)
-summary(wrong)
-coef(wrong)
-
-
-## ------------------------------------------------------------------------------------------------------------------------
-res <- glm( y~x, family=binomial(link="logit"))
-summary(res)
-yLogit <- predict(res) # linear predictor part of equation
-
-plot( yLogit ~ x )
-yhat <- predict(res, type="response")
-plot( y ~ x)
-lines(yhat~x)
+plot(yLogit ~ x )
+yhat <- predict(glm_mod, type = "response")
+plot(y ~ x)
+lines(yhat ~ x)
 # Slope at inflection point is the same as the slope of the linear predictor function
 
+################################################################################
+#   Wolf Logistic Regression                                                ####
 
-## ------------------------------------------------------------------------------------------------------------------------
-elev <- glm(used ~ Elevation2, family=binomial(logit), data=wolf_all)
-summary(elev)
-# looking at summary, intercept is the baseline probability of wolf selecting elevation 0
-# negative slope means as elevation increases, chance of wolf selecting it goes down
-## exploring univarite logistic regression
-## how to obtain 95% confidence intervals? Where are they in the output?
-## CI's using profile log-likelihood's
-confint(elev)
+# Starting with the elevation covariate, first creating a GLM
+elev_glm <- glm(used_avail ~ elevation, 
+                family = binomial(logit), 
+                data = wolf_all)
+summary(elev_glm)
+
+# Looking at summary, intercept is the baseline probability of wolf selecting
+# elevation 0 feet. The negative slope means as elevation increases, chance of 
+# wolf selecting it goes down
+
+# Exploring univarite logistic regression:
+# How to obtain 95% confidence intervals? 
+# Where are they in the output?
+# CI's using profile log-likelihood's
+confint(elev_glm)
 ## CI's using standard errors
-confint.default(elev)
+confint.default(elev_glm)
 
+# To estimate the odds ratio:
+exp(coefficients(elev_glm))
+# To obtain 95% CI's on odds ratio's
+exp(cbind(OR = coef(elev_glm), confint(elev_glm)))
+# Thus, for every increase in elevation by 1 meter, the odds of wolf use decrease 
+# by 0.9936, a really small amount. Note this is not really compelling. 
 
-## ------------------------------------------------------------------------------------------------------------------------
-exp(coefficients(elev))
-## how to obtain 95% CI's on odds ratio's
-exp(cbind(OR=coef(elev), confint(elev)))
+# Next we will consider rescaling to make a more compelling example. Let's 
+# rescale to every kilometer instead of every meter
+wolf_all[, elevation_km := wolf_all$elevation / 100]
+elev_km_glm <- glm(used_avail ~ elevation_km, 
+                   family = binomial(logit), 
+                   data = wolf_all)
+summary(elev_km_glm)
+exp(coef(elev_km_glm))
+# We would conclude that for every increase in 100 meters of elevation, the odds 
+# of wolf use decreases by 0.528. Therefore the interpretation of the odds ratio 
+# is scale dependent. 
 
+# Next, let's continue by extracting predictions from our Elevation model. 
+# First, we create a new vector of elevations from 0 to 3000 meters, the 
+# approximate range of elevations in BNP where wolves were observed or could
+# have been (available elevations). 
+bnp_elev <- 0:3000 
 
+# Then use the predict function to predict Y values, given the elevation glm 
+elev_predict <- predict(elev_glm,
+                        newdata = data.frame(elevation = bnp_elev), 
+                        type = "response") 
+hist(elev_predict)
+plot(bnp_elev, 
+     elev_predict, 
+     type = "l", 
+     ylim = c(0, 1.0), 
+     ylab = "Pr(Used)") # Y axis, predicted probability of use
 
-## ------------------------------------------------------------------------------------------------------------------------
-wolf_all$elev100 <- wolf_all$Elevation2 / 100
-elev100 <- glm(used ~ elev100, family=binomial(logit), data=wolf_all)
-summary(elev100)
-exp(coef(elev100))
+# If we look at just the elevations that were actually available in the wolf  
+# home ranges, we can now tell that we are only seeing a portion of the logistic
+# regression. Note that because the wolf_all$used_avail column is a factor type, 
+# the axis is from 1 to 2 instead of from 0 to 1 so the elev_predict object 
+# needs 1 added to every value to make the values between 1 and 2 as well.
+plot(wolf_all$elevation, wolf_all$used_avail)
+lines(bnp_elev, 
+      elev_predict + 1, 
+      type = "l", 
+      ylab = "Pr(Used)")
 
+# Now we work through the rest of the covariates, next is human use
+human_glm <- glm(used_avail ~ dist_human_acc, 
+                 family = binomial(logit), 
+                 data = wolf_all)
+summary(human_glm)
+hist(wolf_all$dist_human_acc)
+bnp_human <- 0:7000
+human_predict <- predict(human_glm,
+                         newdata = data.frame(dist_human_acc = bnp_human), 
+                         type = "response")
+hist(human_predict)
+plot(bnp_human, 
+     human_predict, 
+     type = "l",
+     ylab = "Pr(Used)")
+plot(wolf_all$dist_human_acc, wolf_all$used_avail)
+lines(bnp_human, 
+      human_predict + 1, 
+      type = "l",
+      ylab = "Pr(Used)")
 
-## ------------------------------------------------------------------------------------------------------------------------
-elevBnp <- 0:3000 ## creates a new vector elevBnp with ranges from 0 - 3000 in it.
-elevPred <- predict(elev, newdata=data.frame(Elevation2=elevBnp), type = "response") ## uses the predict function to predict Y values given the model object elev
-hist(elevPred)
-plot(elevBnp, elevPred, type="l", ylim = c(0,1.0), ylab= "Pr(Used)") # y axis, predicted probability of use
+# Then high human use
+high_glm <- glm(used_avail ~ dist_high_acc, 
+                family = binomial(logit), 
+                data = wolf_all)
+summary(high_glm)
+hist(wolf_all$dist_high_acc)
+bnp_high <- 0:10000
+high_predict <- predict(high_glm, 
+                        newdata = data.frame(dist_high_acc = bnp_high), 
+                        type = "response")
+hist(high_predict)
+plot(bnp_high, 
+     high_predict, 
+     type = "l", 
+     ylab = "Pr(Used)")
+plot(wolf_all$dist_high_acc, wolf_all$used_avail)
+lines(bnp_high, 
+      high_predict + 1, 
+      type = "l", 
+      ylab = "Pr(Used)")
 
+# Now the ungulate HSI models
+sheep_glm <- glm(used_avail ~ sheep_wHSI,
+                 family = binomial(logit), 
+                 data = wolf_all)
+summary(sheep_glm)
+deer_glm <- glm(used_avail ~ deer_wHSI, 
+                family = binomial(logit),
+                data = wolf_all)
+summary(deer_glm)
+elk_glm <- glm(used_avail ~ elk_wHSI, 
+               family = binomial(logit), 
+               data = wolf_all)
+summary(elk_glm)
+moose_glm <- glm(used_avail ~ moose_wHSI, 
+                 family = binomial(logit),
+                 data = wolf_all)
+summary(moose_glm)
+exp(coef(moose_glm)) # odds ratio
+goat_glm <- glm(used_avail ~ goat_wHSI, 
+                family = binomial(logit),
+                data = wolf_all)
+summary(goat_glm)
 
-## ------------------------------------------------------------------------------------------------------------------------
-plot(wolf_all$Elevation2, wolf_all$used)
-lines(elevBnp, elevPred, type="l", ylab= "Pr(Used)")
+# And the predicted values for those models using a vector of the possible HSI 
+# values (1 to 7)
+HSI_values <- 0:7 
+sheep_predict <- predict(sheep_glm,
+                         newdata = data.frame(sheep_wHSI = HSI_values), 
+                         type = "response")
+goat_predict <- predict(goat_glm, 
+                        newdata = data.frame(goat_wHSI= HSI_values),
+                        type = "response")
+moose_predict <- predict(moose_glm, 
+                         newdata = data.frame(moose_wHSI= HSI_values), 
+                         type = "response")
+elk_predict <- predict(elk_glm, 
+                       newdata = data.frame(elk_wHSI= HSI_values), 
+                       type = "response")
+deer_predict <- predict(deer_glm, 
+                        newdata = data.frame(deer_wHSI= HSI_values), 
+                        type = "response")
+sheep_predict <- predict(sheep_glm, 
+                         newdata = data.frame(sheep_wHSI= HSI_values), 
+                         type = "response")
 
-
-## ------------------------------------------------------------------------------------------------------------------------
-## next human use
-distHuman <- glm(used ~ DistFromHumanAccess2, family=binomial(logit), data=wolf_all)
-summary(distHuman)
-hist(wolf_all$DistFromHumanAccess2)
-disthumanBnp = 0:7000
-disthumanPred = predict(distHuman, newdata=data.frame(DistFromHumanAccess2=disthumanBnp), type="response")
-hist(disthumanPred)
-plot(disthumanBnp, disthumanPred, type="l", ylab= "Pr(Used)")
-plot(wolf_all$DistFromHumanAccess2, wolf_all$used)
-lines(disthumanBnp, disthumanPred, type="l", ylab= "Pr(Used)")
-
-
-## ------------------------------------------------------------------------------------------------------------------------
-## next human use
-distHHuman <- glm(used ~ DistFromHighHumanAccess2, family=binomial(logit), data=wolf_all)
-summary(distHHuman)
-hist(wolf_all$DistFromHighHumanAccess2)
-disthumanBnp = 0:10000
-disthumanPred = predict(distHHuman, newdata=data.frame(DistFromHighHumanAccess2=disthumanBnp), type="response")
-hist(disthumanPred)
-plot(disthumanBnp, disthumanPred, type="l", ylab= "Pr(Used)")
-plot(wolf_all$DistFromHighHumanAccess2, wolf_all$used)
-lines(disthumanBnp, disthumanPred, type="l", ylab= "Pr(Used)")
-
-
-## ------------------------------------------------------------------------------------------------------------------------
-# now lets do all at once for ungulate HSI models
-sheep <- glm(used ~ sheep_w2, family=binomial(logit), data=wolf_all)
-summary(sheep)
-deer <- glm(used ~ deer_w2, family=binomial(logit), data=wolf_all)
-summary(deer)
-elk <- glm(used ~ elk_w2, family=binomial(logit), data=wolf_all)
-summary(elk)
-moose <- glm(used ~ moose_w2, family=binomial(logit), data=wolf_all)
-summary(moose)
-exp(coef(moose)) # odds ratio
-goat <- glm(used ~ goat_w2, family=binomial(logit), data=wolf_all)
-summary(goat)
-
-
-## ------------------------------------------------------------------------------------------------------------------------
-habvalues <- 0:7 ## making a vector of hsi values
-sheeppred <- predict(sheep, newdata = data.frame(sheep_w2 = habvalues), type = "response")
-goatpred <- predict(goat, newdata = data.frame(goat_w2 = habvalues), type = "response")
-moosepred <- predict(moose, newdata = data.frame(moose_w2 = habvalues), type = "response")
-elkpred <- predict(elk, newdata = data.frame(elk_w2 = habvalues), type = "response")
-deerpred <- predict(deer, newdata = data.frame(deer_w2 = habvalues), type = "response")
-sheeppred <- predict(sheep, newdata = data.frame(sheep_w2 = habvalues), type = "response")
-
-
-## ------------------------------------------------------------------------------------------------------------------------
-## back to elevation
-elev <- glm(used ~ Elevation2, family=binomial(logit), data=wolf_all)
-summary(elev)
-wolf_all$fitted.Elev <- fitted(elev) # predicted probability of wolf use at that elevation
+# Now using the elevation glm, we will save the predicted values as a new column.
+# Just a reminder of the elevation glm
+summary(elev_glm)
+# Then add a column that is the predicted probability of wolf use at that elevation
+wolf_all[, elev_fitted := fitted(elev_glm)]
+# Let's look at that data a little
 head(wolf_all)
-hist(wolf_all$fitted.Elev)
-plot( wolf_all$Elevation2, wolf_all$fitted.Elev)
+hist(wolf_all$elev_fitted)
+plot(wolf_all$elevation, wolf_all$elev_fitted)
+
+################################################################################
+#   Graphical Predictions with ggplot                                       ####
 
 
 ## ------------------------------------------------------------------------------------------------------------------------

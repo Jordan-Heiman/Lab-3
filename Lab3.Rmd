@@ -377,7 +377,7 @@ confint.default(elev)
 Recall Equation 5 (and 6) above: 
 $$\frac{(P)}{(1-P)} = exp^{(\beta_0+\beta_1X_1+\beta_nX_n)} + \epsilon$$ 
 
-In Equation 5 (and 6) the formulations are considered the odds ratio of Y occuring, given a per-unit change in each X variable.  Read more on Odds-ratio's in Hosmer and Lemeshow.  But go back to our 'fair' coin of p =0.5. Thus, here, we have the odds ratio of 0.5/0.5 = 1. That is, an odds ratio of 1 is a fair bet, equally likely to obtain a heads (1) or a tail (0). This is the formulation that is common sense to people who gamble (though why people gamble I'm unclear).  
+In Equation 5 (and 6) the formulations are considered the odds ratio of Y occuring, given a per-unit change in each X variable.  Read more on Odds-ratio's in Hosmer and Lemeshow.  But go back to our 'fair' coin of p = 0.5. Thus, here, we have the odds ratio of 0.5/0.5 = 1. That is, an odds ratio of 1 is a fair bet, equally likely to obtain a heads (1) or a tail (0). This is the formulation that is common sense to people who gamble (though why people gamble I'm unclear).  
 
 Consider an outcome that is 0.67 chance of heads, and 0.33 chance of tails. here, the odds-ratio = 0.67/0.33 = 2, and the log-odds is log(2) = 0.69. Thus, the probability of obtaining a heads here, 1, is twice that of getting a tails. The log-odds says there is a 69% higher chance of getting a heads than a tail.  We will learn the log-odds is not symmetric shortly.
 
@@ -388,10 +388,9 @@ exp(coefficients(elev))
 exp(cbind(OR=coef(elev), confint(elev)))
 
 ```
-Thus, for every increase in elevation by 1 meter, the odds of wolf use decrease by 0.9936, a really small amount. Note this is not really compelling. Next we will consider rescaling to make a more compelling example. 
-
+Thus, for every increase in elevation by 1 meter, the odds of wolf use decrease by 0.9936, a really small amount. Note this is not really compelling. Next we will consider rescaling to make a more compelling example.
 ## Rescaling beta coefficients and odds ratio's 
-Lets rescale to be the odds in a per 100 meter change of elevation. 
+Lets rescale to be the odds in a 100 meter change of elevation. 
 ```{r}
 wolf_all$elev100 <- wolf_all$Elevation2 / 100
 elev100 <- glm(used ~ elev100, family=binomial(logit), data=wolf_all)
@@ -417,11 +416,11 @@ lines(elevBnp, elevPred, type="l", ylab= "Pr(Used)")
 How do wolves respond to elevation? Can we make predictions about wolf use of elevations < 1000 m based on our data in Banff? What would that be called?
 
 # Objective 5 - Interpreting Coefficients in Logistic Models
-What this example shows us is that there is a pure logistic model behind the response of wolves to elevation is only 'capturing' a range of the entire logistic function.  This is because of the logit link and the challenge of interpreting the intercept and slope expressed in the linear scale in true probabilities. 
+What this example shows us is that there is a pure logistic model behind the response of wolves to elevation. We are only 'capturing' a range of the entire logistic function.  This is because of the logit link and the challenge of interpreting the intercept and slope expressed in the linear scale in true probabilities. 
 
 Note that just like OLS regression, the intercept and slope determine the shape of the logistic regression response in real probabilities. But it is more complicated because of the relationship between the coefficients in the linear part of the logit (e.g., Eq. 4) and their relationship to the real probabilities. This is why many, many statistical textbooks always tell students that the best way to interpret probabilities from any logistic regression is to plot them. This is especially true in logistic regression models with more than one covariate, interactions, and more complex models such as mixed-effects models.  Certainly, we can easily understand that a negative $\beta_1$ implies that the probability of the outcome, here, use, declines with increasing X. But we cannot necessarily understand or solve something like the Y intercept when X = 0, or, vice versa, what X will be when Y = 0 like we can with OLS regression. 
 
-To illustrate the effects of varying the $\beta_0$ and $\beta_1$ on the shape of the logistic regression predictions, I show here in Fig. 3.1 the effects of varying first the intercept, $\beta_0$, from -5 to 5 where $\beta_1$  was fixed at 0.05 (Fig. 9.1.a).  This shows that like the OLS regression, here, $\beta_0$ governs where Y crosses the X=0 line. Unlike OLS, however, the slopes are not parallel because of the fixed $\beta_1$  =0.05 because of the logit link function.  Second, I fixed $\beta_0$ = 0 varied the coefficient, $\beta_1$ , from -0.10 to +0.10.  
+To illustrate the effects of varying the $\beta_0$ and $\beta_1$ on the shape of the logistic regression predictions, I show here in Fig. 3.1 the effects of varying first the intercept, $\beta_0$, from -5 to 5 where $\beta_1$  was fixed at 0.05 (Fig. 9.1.a).  This shows that like the OLS regression, here, $\beta_0$ governs where Y crosses the X=0 line. Unlike OLS, however, the slopes are not parallel because of the fixed $\beta_1$ = 0.05 because of the logit link function.  Second, I fixed $\beta_0$ = 0 varied the coefficient, $\beta_1$ , from -0.10 to +0.10.  
 
 
 ![Figure 3.1. Effects of varying first a) the intercept, b0 , from -5 to 5 where b1  was fixed at 0.05, and b) the coefficient, b1 , where b0 = 0 on the predicted probability of 1 or 0 from the same logistic regression equation. ](Figures/logisticregression1.png)
